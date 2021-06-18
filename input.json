@@ -1,0 +1,63 @@
+{
+	"jobName": "AggiornaBarcode4S",
+	"jobXmlFile": "job-AggiornaBarcode4S.xml",
+	"jarName": "jobAggiornaBarcode4S-0.0.1.jar",
+	"params": {
+		"conn.url": {
+			"value": "jdbc:oracle:thin:@gpocbs1o.ced.it:1527:GPOCBS1O"
+		},
+		"conn.driver": {
+			"value": "oracle.jdbc.driver.OracleDriver"
+		},
+
+		"conn.username": {
+			"value": "proc_cflow"
+		},
+		"conn.password": {
+			"value": "proc_cflow"
+		},
+		"conn4s.url": {
+			"value": "jdbc:jtds:sqlserver://CG03DP1G.GEPO.INTRANET:1533;databaseName=4Service"
+		},
+		"conn4s.driver": {
+			"value": "net.sourceforge.jtds.jdbc.Driver"
+		},
+		"conn4s.username": {
+			"value": "App_4Service"
+		},
+		"conn4s.password": {
+			"value": "App_4S3rv1c3"
+		},
+		"query.select": {
+			"value": "Select id, Ist,STATO_ATTUALE,Num_Richiesta,Barcode,Descrizione,id_Rif From Ctrk_V_Track_Banca WHERE ist = '89' AND stato_attuale IN ('ATTESA DEMATERIALIZZAZIONE') AND descrizione = 'Documento' AND NUM_RICHIESTA IS NOT NULL AND BARCODE IS NOT NULL"
+		},
+		"query.select.due": {
+			"value": "Select ist, Num_Richiesta, Barcode From Ctrk_V_Track_Banca where IST='89' AND stato_attuale IN ('ATTESA DEMATERIALIZZAZIONE') AND descrizione = 'Documento'"
+		},
+		"query.insert": {
+			"value": "INSERT INTO [4Service].[dbo].[_Dati_Barcode_Prova] ([cliente], [lavorazione], [pratica], [barcode], [stato],[DATA_INSERIMENTO]) VALUES ('89', '72' ,:NUM_RICHIESTA, :BARCODE, 'INS',GETDATE())"
+		},
+		"mail.smtp": {
+			"value": "cgssrv01.gepo.intranet"
+		},
+		"dir.main": {
+			"value": "C:\\Users\\axc0824\\Desktop\\job\\barcode\\main\\"
+		},
+
+		"file.name": {
+			"value": "Barcode.txt"
+		},
+		"mail.from": {
+			"value": "server@c-global.it"
+		},
+		"mail.indirizzo": {
+			"value": "mario.russo@c-global.it"
+		},
+		"mailOk.titolo": {
+			"value": "Esito Barcode4S Ok"
+		},
+		"mailKo.titolo": {
+			"value": "Errore Barcode4S" 
+		}
+	}
+}
