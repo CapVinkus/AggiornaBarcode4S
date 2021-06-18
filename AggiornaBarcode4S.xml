@@ -1,0 +1,172 @@
+<beans xmlns="http://www.springframework.org/schema/beans"
+	xmlns:batch="http://www.springframework.org/schema/batch"
+	xmlns:task="http://www.springframework.org/schema/task"
+	xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+	xmlns:aop="http://www.springframework.org/schema/aop"
+	xsi:schemaLocation="http://www.springframework.org/schema/batch 
+	http://www.springframework.org/schema/batch/spring-batch.xsd 
+	http://www.springframework.org/schema/beans 
+	http://www.springframework.org/schema/beans/spring-beans.xsd
+	http://www.springframework.org/schema/aop 
+        http://www.springframework.org/schema/aop/spring-aop.xsd">
+
+	<description>
+		Lettura da DB proc_cflow, inserimento in un file txt che
+		andrà inviato per
+		email con i record modificati.
+		Dopo aver inviato la
+		mail, modificato i record all'interno di 4Service.
+	</description>
+
+	<job id="AggiornaBarcode4S"
+		xmlns="http://www.springframework.org/schema/batch">
+		<step id="stepDbCflowReader" next="stepDbCflowReader2">
+			<tasklet>
+				<chunk reader="dbReader" writer="fileWriter"
+					commit-interval="1" />
+			</tasklet>
+		</step>
+		<step id="stepDbCflowReader2">
+			<tasklet>
+				<chunk reader="addValue" processor="printProcessor"
+					writer="dbInsertWriter" commit-interval="1" />
+				<listeners>
+					<listener ref="countListener" />
+				</listeners>
+			</tasklet>
+			<batch:next on="COMPLETED" to="sendMailOkTaskletStep" />
+			<batch:next on="FAILED" to="sendMailKoTaskletStep" />
+		</step>
+		<step id="sendMailKoTaskletStep">
+			<tasklet ref="sendMailKoTasklet" />
+		</step>
+		<step id="sendMailOkTaskletStep">
+			<tasklet ref="sendMailOkTasklet" />
+		</step>
+	</job>
+
+	<!-- === READER === -->
+
+	<bean id="dbReader"
+		class="org.springframework.batch.item.database.JdbcCursorItemReader"
+		scope="step">
+		<property name="dataSource" ref="jobDataSource" />
+		<property name="sql" value="#{jobParameters['query.select']}" />
+		<property name="rowMapper">
+			<bean class="org.springframework.jdbc.core.ColumnMapRowMapper" />
+		</property>
+	</bean>
+
+	<bean id="addValue"
+		class="org.springframework.batch.item.database.JdbcCursorItemReader"
+		scope="step">
+		<property name="dataSource" ref="jobDataSource" />
+		<property name="sql"
+			value="#{jobParameters['query.select.due']}" />
+		<property name="rowMapper">
+			<bean class="org.springframework.jdbc.core.ColumnMapRowMapper" />
+		</property>
+	</bean>
+
+	<!-- === WRITER === -->
+
+	<bean id="fileWriter"
+		class="org.springframework.batch.item.file.FlatFileItemWriter"
+		scope="step">
+		<property name="resource"
+			value="file:#{jobParameters['dir.main']}/#{jobParameters['file.name']}" />
+		<property name="lineAggregator">
+			<bean
+				class="org.springframework.batch.item.file.transform.DelimitedLineAggregator">
+				<property name="delimiter" value=";" />
+				<property name="fieldExtractor">
+					<bean
+						class="org.springframework.batch.item.file.transform.PassThroughFieldExtractor" />
+				</property>
+			</bean>
+		</property>
+	</bean>
+
+	<bean id="dbInsertWriter"
+		class="org.springframework.batch.item.database.JdbcBatchItemWriter"
+		scope="step">
+		<property name="dataSource" ref="jobDataSource4Service" />
+		<property name="sql" value="#{jobParameters['query.insert']}" />
+		<property name="itemPreparedStatementSetter">
+			<bean
+				class="org.springframework.batch.item.database.support.ColumnMapItemPreparedStatementSetter" />
+		</property>
+	</bean>
+
+
+	<!-- === MAILFAILED SENDER TASKLET === -->
+	<bean id="sendMailKoTasklet"
+		class="it.gepo.engine.support.tasklet.SendMailTasklet" scope="step">
+		<property name="mailSender" ref="delegatedMailSender"></property>
+		<property name="from" value="#{jobParameters['mail.from']}"></property>
+		<property name="recipients"
+			value="#{jobParameters['mail.indirizzo']}"></property>
+		<property name="title"
+			value="#{jobParameters['mailKo.titolo']}"></property>
+		<property name="attachment"
+			value="file:#{jobParameters['dir.main']}/#{jobParameters['file.name']}" />
+		<property name="textGenerator">
+			<bean class="it.gepo.engine.support.utility.TextGenerator">
+				<property name="text"
+					value="Errore inserimento su 4Service: \n #{jobExecutionContext['getSummary']}"></property>
+			</bean>
+		</property>
+		<property name="separateMails" value="true" />
+	</bean>
+
+	<!-- === MAILOK SENDER TASKLET === -->
+
+	<bean id="sendMailOkTasklet"
+		class="it.gepo.engine.support.tasklet.SendMailTasklet" scope="step">
+		<property name="mailSender" ref="delegatedMailSender"></property>
+		<property name="from" value="#{jobParameters['mail.from']}"></property>
+		<property name="recipients"
+			value="#{jobParameters['mail.indirizzo']}"></property>
+		<property name="title"
+			value="#{jobParameters['mailOk.titolo']}"></property>
+		<property name="attachment"
+			value="file:#{jobParameters['dir.main']}/#{jobParameters['file.name']}" />
+		<property name="textGenerator">
+			<bean class="it.gepo.engine.support.utility.TextGenerator">
+				<property name="text"
+					value="sono stati inseriti #{jobExecutionContext['getWriteCount']} record "></property>
+			</bean>
+		</property>
+		<property name="separateMails" value="true" />
+	</bean>
+
+	<!-- === MAIL SENDER === -->
+	<bean id="delegatedMailSender"
+		class="org.springframework.mail.javamail.JavaMailSenderImpl"
+		scope="step">
+		<property name="host" value="#{jobParameters['mail.smtp']}" />
+	</bean>
+
+	<!-- === DATASOURCE === -->
+	<bean id="jobDataSource"
+		class="org.apache.commons.dbcp.BasicDataSource" scope="job">
+		<property name="driverClassName"
+			value="#{jobParameters['conn.driver']}" />
+		<property name="url" value="#{jobParameters['conn.url']}" />
+		<property name="username"
+			value="#{jobParameters['conn.username']}" />
+		<property name="password"
+			value="#{jobParameters['conn.password']}" />
+	</bean>
+
+	<bean id="jobDataSource4Service"
+		class="org.apache.commons.dbcp.BasicDataSource" scope="job">
+		<property name="driverClassName"
+			value="#{jobParameters['conn4s.driver']}" />
+		<property name="url" value="#{jobParameters['conn4s.url']}" />
+		<property name="username"
+			value="#{jobParameters['conn4s.username']}" />
+		<property name="password"
+			value="#{jobParameters['conn4s.password']}" />
+	</bean>
+</beans>
